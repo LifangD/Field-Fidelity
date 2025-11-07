@@ -1,0 +1,10 @@
+__pycache__/
+*.pth
+*.bin
+*.safetensors
+outputs/
+outputs/experiments/*
+!outputs/.gitkeep
+data/
+tools/
+.cache
