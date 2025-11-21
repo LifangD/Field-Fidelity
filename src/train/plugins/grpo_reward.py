@@ -66,7 +66,7 @@ reward_logger, REWARD_JSONL_PATH = setup_reward_logging()
 class IDKGenRM(ORM):
 
     
-    def __init__(self, model=None, template=None, use_api=True, api_base_url="http://10.160.199.226:8001/v1", api_key="EMPTY"):
+    def __init__(self, model=None, template=None, use_api=True, api_base_url="http://10.160.199.227:8017/v1", api_key="EMPTY"):
         self.model = model
         self.template = template
         self.use_api = use_api  # 新增：选择使用API还是PT引擎
@@ -495,7 +495,7 @@ class IDKGenRM(ORM):
             
             # 提取问题和回答
             if messages and len(messages) >= 2:
-                for msg in messages:
+                for msg in reversed(messages):
                     if msg.get('role') == 'user':
                         content = msg.get('content', '')
                         if isinstance(content, str):
@@ -524,10 +524,10 @@ class IDKGenRM(ORM):
                 # 准备推理消息
                 original_user_content = None
                 # 提取原始用户消息内容（可能包含图片）
-                for msg in messages:
-                    if msg.get('role') == 'user':
-                        original_user_content = msg.get('content')
-                        break
+                # for msg in messages:
+                #     if msg.get('role') == 'user':
+                #         original_user_content = msg.get('content')
+                #         break
                 
                 use_image_eval = False
                 if use_image_eval:
@@ -634,6 +634,12 @@ class IDKGenRM(ORM):
                                     original_images=info['original_images'] # 传递原始图片信息
                                 )
                                 original_idx = valid_indices[i]
+                                ## clipping and scale
+                                # if score<0.6:
+                                #     score = 0.0
+                                # else:
+                                #     score = 10*score
+
                                 rewards[original_idx] = score
                                 logger.info(f"样本 {original_idx + 1} 奖励: {score:.3f}")
                             else:

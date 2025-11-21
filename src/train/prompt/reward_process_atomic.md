@@ -1,76 +1,55 @@
-**角色定义**: 视觉问答质量评估专家
+**Role Definition**: Visual Question Answering Quality Evaluator
 
-**评估材料**
-- 问题: {question}
-- 图像: [实际视觉内容]
-- 模型回答: {current_answer}
-- 参考答案: {reference_answer}
+**Evaluation Materials**
+- Question: {question}
+- Image: [actual visual content]
+- Model Answer: {current_answer}
+- Reference Answer: {reference_answer}
 
-**评估流程**
+### **Evaluation Logic**
 
-**步骤1: 句子级别分解与必需覆盖识别**
-- **完整句子提取**: 从模型回答和参考答案中提取完整句子作为评估单元，每个句子作为一个包含多个可验证事实的原子声明
-- **必需覆盖识别**: 从问题/参考答案中识别必须覆盖的核心句子内容
-- **综合评估集合**: 结合模型回答中的所有句子和必需覆盖要求进行全面评估
+**Determine Reference Answer Type**
 
-**步骤2: 重要性分类**
-- **主要 (权重 1.0)**: 直接回答问题的句子，问题/参考答案要求中的核心描述
-- **次要 (权重 0.5)**: 补充细节、描述性内容、非必要的推理陈述
+**If reference answer indicates "unknown/unanswerable"**:
+- **Model answers "don't know"** → Score = 1.0
+- **Model attempts to give specific content** → Score = 0.0
 
-**步骤3: 模型句子逐一打分** 
-对模型回答中的每个句子，分配分数 ∈ {1, 0.5, 0}:
-- **1**: 与图像/参考完全一致，**或者**对不确定/不可见元素正确表达不确定性（如"似乎"、"可能"、"无法确定"）
-- **0.5**: 对图像中无法明确验证的元素做出陈述，但不与已知信息冲突（如推测性描述、常见属性推断）
-- **0**: 与图像/参考明显冲突，明显幻觉，基于错误前提的编造
+**If reference answer contains specific content**:
+- **Model gives better or equivalent answer** → Score = 1.0
+- **Model is partially correct** → Score = 0.5
+- **Model is completely wrong** → Score = 0.2
+- **Model answers "don't know"** → Score = 0.0 (severe over-conservative penalty)
 
-对于参考答案要求但模型缺失的句子，额外添加缺失项并打0分。
+### **Evaluation Examples**
 
-**具体判断标准：**
-- **1分情况**: 视觉证据清晰支持 OR 正确表达不确定性
-- **0.5分情况**: 视觉证据不足以确认，但属于合理推测范围（如"木质地板"当地板材质不清晰时）
-- **0分情况**: 与可见证据直接矛盾 OR 完全无根据的编造
+**Example: Over-conservative**
+- **Question**: "What animal is this?"
+- **Reference Answer**: "This is a Golden Retriever"
+- **Model Answer**: "I'm not sure what type of animal this is"
 
-**步骤4: 加权聚合**
-原始分数 = Σ(权重 × 分数) / Σ(权重)
+```
+Reference Answer Type: Specific content
+Model Quality: Over-conservative (saying "don't know" to answerable question) → Score = 0.0
+```
 
-**步骤5: 最终调整**
-- **专业奖励 (+0.1)**: 明确解释遮挡/模糊/不确定性原因而不过度推测
-- **冗余惩罚 (-0.1~0.2)**: 在封闭式问题中存在过多无关内容
-- 最终分数 = clip(原始分数 + 奖励 - 惩罚, 0, 1)
+### **Auxiliary Functions**
 
-**示例评估**
+**Detection of "Don't Know" Response Keywords**:
+"ambiguous", "bad question", "cannot confirm", "depend", "don't know", "it is difficult", "i can't", "none", "not clear", "not sure", "sorry", "hard to determine", "not possible", "uncertain", "unanswerable", "unknown", "not certain", "cannot determine"
 
-参考答案: "图像展示了一个舒适的卧室，有一张大床紧挨着棕色衣柜。床上铺着黑白相间的被子，墙上似乎挂着一件黑色夹克。床的两侧都有落地灯，为夜间使用提供充足照明。除了卧室家具外，房间里还有几个储物篮，表明居住者喜欢整理。这些储物篮放置在不同位置，比如衣柜上方和下方。总体而言，这个卧室对居住者来说是一个舒适放松的空间。"
+**Quality Assessment Standards**:
+- **Better/Equivalent (1.0)**: Accurately answers reference content, may include additional accurate details
+- **Partially Correct (0.5)**: Core information correct but missing details or has minor errors
+- **Completely Wrong (0.2)**: Provides factually incorrect information
+- **Over-conservative (0.0)**: Answers "don't know" to answerable questions
 
-模型回答: "图像显示了一个卧室，有木质衣柜、铺着深色床单的整洁床铺、两盏带白色灯罩的落地灯，以及挂在衣柜背面的夹克。墙壁涂成柔和的棕色调，地板是浅色木质的。房间营造出温暖舒适的氛围。"
+### **Output Format**
 
-| 模型句子评估 | 来源 | 重要性 | 权重 | 分数 | 证据说明 | 加权分数 |
-|-------------|------|--------|------|------|----------|----------|
-| 图像显示卧室，有木质衣柜、整洁床铺、落地灯、夹克 | 模型 | 主要 | 1.0 | 0.5 | 大部分一致但床单颜色和夹克位置与参考有冲突 | 0.5 |
-| 墙壁涂成柔和棕色调，地板是浅色木质 | 模型 | 次要 | 0.5 | 0.5 | 参考中未提及，合理的推测性描述 | 0.25 |
-| 房间营造出温暖舒适的氛围 | 模型 | 次要 | 0.5 | 1.0 | 与参考中"舒适放松空间"一致 | 0.5 |
-| **[缺失]** 床上铺着黑白相间被子 | 缺失 | 主要 | 1.0 | 0 | 参考要求但模型未覆盖，模型说"深色床单"冲突 | 0.0 |
-| **[缺失]** 房间里有几个储物篮 | 缺失 | 主要 | 1.0 | 0 | 参考要求但模型完全未提及 | 0.0 |
-| **[缺失]** 床两侧都有落地灯提供照明 | 缺失 | 主要 | 1.0 | 0 | 参考要求具体位置，模型只说"两盏落地灯" | 0.0 |
-| **总计** | | | **5.0** | | | **1.25** |
+**Reference Answer Analysis**:
+- **Type**: [Unanswerable/Specific Content]
 
-**聚合与调整**
-- **原始分数**: Σ(加权分数) ÷ Σ(权重) = 1.25 ÷ 5.0 = 0.25
-- **专业奖励**: +0 (未提供不确定性解释)
-- **冗余惩罚**: -0 (描述性任务，无过多无关内容)
-- **最终分数**: clip(0.25 + 0 - 0, 0, 1) = 0.25
+**Model Answer Analysis**:
+- **Response Type**: [Don't Know/Specific Answer/Wrong Answer]
+- **Quality Rating**: [Better/Equivalent/Partially Correct/Completely Wrong/Over-conservative]
 
-**输出格式**
-
-| 模型句子评估 | 来源 | 重要性 | 权重 | 分数 | 证据说明 | 加权分数 |
-|-------------|------|--------|------|------|----------|----------|
-| [句子简化摘要] | [模型/缺失] | [主要/次要] | [1.0/0.5] | [1/0.5/0] | [评分理由] | [权重×分数] |
-| **总计** | | | **[总权重]** | | | **[总加权分数]** |
-
-**聚合与调整**
-- **原始分数**: Σ(加权分数) ÷ Σ(权重) = [总加权分数] ÷ [总权重] = [原始分数]
-- **专业奖励**: +[0/0.1] ([说明])
-- **冗余惩罚**: -[0/0.1-0.2] ([说明])
-- **最终分数**: [计算公式] = [最终分数]
-
-【分数】\boxed{[0.00-1.00]}
+**【Final Score】**: \boxed{[0.0/0.2/0.5/1.0]}

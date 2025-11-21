@@ -25,7 +25,8 @@ logger = get_logger()
 def setup_reward_logging():
     """设置reward评估日志"""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_dir = f"/data/dlf/code/Field-Fidelity/outputs/experiments/logs/reward_evaluation_{timestamp}"
+    out_dir = os.environ["OUTPUT_DIR"]
+    log_dir = f"{out_dir}/reward_evaluation_{timestamp}"
     os.makedirs(log_dir, exist_ok=True)
     
     # 创建reward评估专用logger
@@ -65,10 +66,45 @@ def write_reward_record(jsonl_path: str, record: dict):
 # 初始化日志系统
 reward_logger, REWARD_JSONL_PATH = setup_reward_logging()
 
+
+def contains_idk(text):
+    KEYWORDS = [
+        "ambiguous",
+        "bad question", 
+        "cannot confirm",
+        "depend",
+        "don't know",
+        "it is difficult",
+        "i can't",
+        "none",
+        "not clear",
+        "not sure", 
+        "sorry",
+        "hard to determine",
+        "not possible",
+        "uncertain",
+        "unanswerable",
+        "unknown",
+        "not certain",
+        "cannot determine"
+        
+    ]
+
+    if not text:
+        return False
+        
+    text_lower = text.lower().strip()
+    
+    for keyword in KEYWORDS:
+        if keyword.lower() in text_lower:
+            return True
+            
+    return False
+
 class IDKGenRM(ORM):
 
     
-    def __init__(self, model=None, template=None, use_api=True, api_base_url="http://10.160.199.227:8008/classify", api_key="EMPTY", reward_model_name="/data/share/hub/models/Skywork/Skywork-Reward-V2-Llama-3___1-8B-40M"):
+    def __init__(self, model=None, template=None, use_api=True, api_base_url="http://10.160.199.227:8018/classify", api_key="EMPTY", reward_model_name="/data/share/hub/models/Skywork/Skywork-Reward-V2-Llama-3___1-8B-40M"):
         self.model = model
         self.template = template
         self.use_api = use_api  # 新增：选择使用API还是PT引擎
@@ -109,11 +145,11 @@ class IDKGenRM(ORM):
                 return responses[0]["embedding"][0]
             else:
                 logger.error(f"Reward API调用失败，状态码: {response.status_code}, 响应: {response.text}")
-                return 0.5  # 默认分数
+                return 0.0  # 默认分数
                 
         except Exception as e:
             logger.error(f"获取reward分数失败: {e}")
-            return 0.5  # 默认分数
+            return 0.0  # 默认分数
 
     def infer_with_engine(self, messages: List[Dict]) -> str:
         """使用PT引擎进行推理"""
@@ -179,7 +215,7 @@ class IDKGenRM(ORM):
         return "You are a helpful assistant"
     def _build_skyrm_question_template(self) -> str:
         """导入奖励提示"""
-        with open("/data/dlf/code/Field-Fidelity/src/train/prompt/sky_rm.md", "r") as f:
+        with open("/data/dlf/code/Field-Fidelity/src/train/prompt/sky_rm_v2.md", "r") as f:
             return f.read()
 
         
@@ -196,7 +232,7 @@ class IDKGenRM(ORM):
         # 检查tokenizer是否可用
         if not self.tokenizer:
             logger.error("Reward model tokenizer未初始化")
-            return torch.tensor([0.5] * len(inputs), dtype=torch.float32)
+            return torch.tensor([0] * len(inputs), dtype=torch.float32)
         
         assert inputs is not None, "inputs is None"
         logger.info(f"开始处理批次: {len(inputs)}样本")
@@ -207,7 +243,7 @@ class IDKGenRM(ORM):
         reward_logger.info("=" * 60)
         
         # 准备奖励分数列表
-        rewards = [0.5] * len(inputs)  # 默认分数
+        rewards = [0] * len(inputs)  # 默认分数
         
         for idx, inp in enumerate(inputs):
             try:
@@ -243,12 +279,16 @@ class IDKGenRM(ORM):
                 if current_answer and question:
                     # 构造对话格式
                    
-                    rm_question = self.reward_prompt.format(question=question, reference_answer=reference_answer)
+                    if len(reference_answer)==0:
+                        rm_question = question
+                    else:   
+                        rm_question = self.reward_prompt.format(question=question, reference_answer=reference_answer)
                     rm_current_answer = current_answer
                     if "<answer>" in current_answer and "</answer>" in current_answer:
                         matches = re.findall("<answer>(.*?)</answer>", current_answer, re.DOTALL)
                         if len(matches) > 0:
                             rm_current_answer = matches[0]
+                    
                     if rm_current_answer and len(rm_current_answer)>0: 
                         conv = [
                             {"role": "user", "content": rm_question}, 
@@ -262,8 +302,13 @@ class IDKGenRM(ORM):
                             self.tokenizer, 
                             self.reward_model_name
                         )
+                        ## restrict idk semantic-score
+                        if not contains_idk(reference_answer) and contains_idk(current_answer) and score>0:
+                            score = -score
+                            
+                        
                     else:
-                        score = 0.5
+                        score = 0.0
                     rewards[idx] = score
                     logger.info(f"样本 {idx + 1} 奖励: {score:.4f}")
                     
@@ -286,7 +331,7 @@ class IDKGenRM(ORM):
             except Exception as e:
                 logger.error(f"处理样本 {idx + 1} 失败: {e}")
                 reward_logger.error(f"处理样本 {idx + 1} 失败: {e}")
-                # 保持默认分数0.5
+                # 保持默认分数0.0
         
         avg_reward = sum(rewards) / len(rewards) if rewards else 0
         logger.info(f"批次完成: 平均奖励 {avg_reward:.4f}")
@@ -300,6 +345,8 @@ class IDKGenRM(ORM):
         reward_logger.info("=" * 60)
         
         return torch.tensor(rewards, dtype=torch.float32)
+        
+
 
 
 

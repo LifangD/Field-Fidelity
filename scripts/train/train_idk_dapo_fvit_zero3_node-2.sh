@@ -1,16 +1,16 @@
 #!/bin/bash
 
 export PYTHONPATH=/data/dlf/code:$PYTHONPATH
-export CUDA_VISIBLE_DEVICES="0,1"
+export CUDA_VISIBLE_DEVICES="6,7"
 export NPROC_PER_NODE=2
-export MASTER_PORT=12345
+export MASTER_PORT=12346
 
 # 训练参数配置
 MODEL="/data/share/hub/models/Qwen/Qwen2___5-VL-7B-Instruct " 
 DATASET="/data/dlf/code/Field-Fidelity/data/rlhf/formatted/rlhf_formatted.jsonl /data/dlf/code/Field-Fidelity/data/idk/data_format/idk_train_formatted_1k.jsonl"  
 #VAL_DATASET="/data/dlf/code/Field-Fidelity/data/vqav2/formatted/vqav2_val_formatted.jsonl"
-OUTPUT_DIR="/data/dlf/code/Field-Fidelity/outputs/experiments/grpo_sky/test"
-PLUGIN_FILE="/data/dlf/code/Field-Fidelity/src/train/plugins/grpo_skyrm.py"
+OUTPUT_DIR="/data/dlf/code/Field-Fidelity/outputs/experiments/grpo_sky/dapo_fvit_rewrite"
+PLUGIN_FILE="/data/dlf/code/Field-Fidelity/src/train/plugins/grpo_skyrm_rewrite.py"
 
 # 启动GRPO训练
 MAX_PIXELS=1003520 \
@@ -30,10 +30,10 @@ swift rlhf \
     --torch_dtype bfloat16 \
     --max_completion_length 16384 \
     --num_train_epochs 3 \
-    --per_device_train_batch_size 2 \
-    --per_device_eval_batch_size 2 \
+    --per_device_train_batch_size 4 \
+    --per_device_eval_batch_size 4 \
     --learning_rate 1e-6 \
-    --gradient_accumulation_steps 4 \
+    --gradient_accumulation_steps 8 \
     --eval_steps 692 \
     --save_steps 692 \
     --save_total_limit 3 \
@@ -43,10 +43,10 @@ swift rlhf \
     --warmup_ratio 0.05 \
     --dataloader_num_workers 4 \
     --dataset_num_proc 8 \
-    --num_generations 4 \
+    --num_generations 8 \
     --temperature 1.0 \
     --top_p 1.0 \
-    --deepspeed zero2 \
+    --deepspeed zero3 \
     --log_completions true \
     --split_dataset_ratio 0.05 \
     --system /data/dlf/code/Field-Fidelity/src/train/prompt/system_v2.txt \
