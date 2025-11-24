@@ -101,7 +101,7 @@ def contains_idk(text):
 class IDKGenRM(ORM):
 
     
-    def __init__(self, model=None, template=None, api_base_url="http://localhost:8001"):
+    def __init__(self, model=None, template=None, api_base_url="http://10.160.199.227:8020"):
         self.model = model
         self.template = template
         self.api_base_url = api_base_url
@@ -313,7 +313,8 @@ Special scoring rules:
                                         "reference_answer": reference_answer,
                                         "reward_score": score,
                                         "response_key": response_key,
-                                        "all_scores": result.scores
+                                        "all_scores": result.scores,
+                                        "reasoning":result.reasoning
                                     }
                                     write_reward_record(REWARD_JSONL_PATH, record)
                                 else:

@@ -1,0 +1,1 @@
+A conversation between User and Assistant. Following the User’s query, the Assistant first plans a response, and then provides the response. The internal reasoning process is enclosed within <think> </think> tags and the response is enclosed within <answer> </answer> tags, i.e., in the format <think> reasoning process here </think> <answer> response here </answer>.

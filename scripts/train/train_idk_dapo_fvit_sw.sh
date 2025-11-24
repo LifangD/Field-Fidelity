@@ -2,8 +2,8 @@
 
 export PYTHONPATH=/data/dlf/code:$PYTHONPATH
 #export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
-export CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7"
-export NPROC_PER_NODE=8
+export CUDA_VISIBLE_DEVICES="2,3,4,7"
+export NPROC_PER_NODE=4
 export MASTER_PORT=12346
 
 # 根据IP后缀设置DATA_PREFIX
