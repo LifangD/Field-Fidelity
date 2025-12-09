@@ -1,0 +1,11 @@
+question_id,question,image_path,response_a_epoch1,response_a_epoch2,response_a_epoch3,response_b_epoch1,response_b_epoch2,response_b_epoch3,response_c_epoch1,response_c_epoch2,response_c_epoch3,response_d_epoch1,response_d_epoch2,response_d_epoch3,response_e_epoch1,response_e_epoch2,response_e_epoch3,response_f_epoch1,response_f_epoch2,response_f_epoch3,response_g_epoch1,response_g_epoch2,response_g_epoch3,response_h_epoch1,response_h_epoch2,response_h_epoch3
+1,Which hand has the red-drink?,/data/dlf/code/Field-Fidelity/data/coco/train2014/COCO_train2014_000000532014.jpg,1,5,5,1,5,5,1.0,3.0,3.0,1.0,5.0,5.0,1.0,5.0,5.0,1.0,5.0,5.0,5.0,5.0,5.0,1.0,5.0,5.0
+2,Is the briefcase open or closed?,/data/dlf/code/Field-Fidelity/data/rlhf/images/rlhf_002176.jpg,2,1,1,1,1,1,1.0,1.0,1.0,1.0,1.0,1.0,2.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0
+3,What kind of cheese will we need soon?,/data/dlf/code/Field-Fidelity/data/rlhf/images/rlhf_001003.jpg,1,2,3,1,1,2,,,,,,,,,,,,,,,,,,
+4,How many screens are there?,/data/dlf/code/Field-Fidelity/data/rlhf/images/rlhf_003455.jpg,3,5,5,5,5,5,1.0,5.0,5.0,4.0,5.0,5.0,4.0,5.0,5.0,1.0,5.0,5.0,1.0,5.0,5.0,3.0,5.0,5.0
+5,What alliterative phrase refers to an activity regarding transportation of this vehicle?,/data/dlf/code/Field-Fidelity/data/coco/train2014/COCO_train2014_000000266168.jpg,2,2,1,2,2,1,2.0,2.0,1.0,2.0,2.0,1.0,3.0,2.0,1.0,2.0,4.0,1.0,2.0,4.0,1.0,2.0,3.0,1.0
+6,What is on the tail of the plane?,/data/dlf/code/Field-Fidelity/data/rlhf/images/rlhf_004734.jpg,1,1,2,1,1,1,2.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0
+7,Is this an express flight?,/data/dlf/code/Field-Fidelity/data/coco/train2014/COCO_train2014_000000403940.jpg,5,4,3,2,3,4,,,,,,,,,,,,,,,,,,
+8,What is being used as a mouse pad?,/data/dlf/code/Field-Fidelity/data/rlhf/images/rlhf_001117.jpg,3,2,5,1,2,1,3.0,2.0,1.0,3.0,2.0,1.0,1.0,3.0,2.0,3.0,1.0,2.0,1.0,3.0,1.0,5.0,3.0,1.0
+9,What is the make and model of the bike that the man is sitting on?,/data/dlf/code/Field-Fidelity/data/coco/train2014/COCO_train2014_000000529952.jpg,1,4,2,1,4,2,5.0,4.0,2.0,1.0,4.0,2.0,1.0,4.0,2.0,1.0,5.0,2.0,1.0,4.0,2.0,1.0,4.0,2.0
+10,What team's logo is on the cake?,/data/dlf/code/Field-Fidelity/data/coco/train2014/COCO_train2014_000000004827.jpg,5,1,4,2,1,2,,,,,,,,,,,,,,,,,,

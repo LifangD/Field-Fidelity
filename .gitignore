@@ -5,6 +5,7 @@ __pycache__/
 outputs/
 outputs/experiments/*
 !outputs/.gitkeep
-data/
+data/*
 tools/
 .cache
+data

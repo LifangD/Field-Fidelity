@@ -2,6 +2,8 @@ import re
 import json
 import os
 import logging
+import time
+import requests
 from datetime import datetime
 from typing import List, Dict
 import torch
@@ -107,6 +109,11 @@ class IDKGenRM(ORM):
         self.api_base_url = api_base_url
         self.debug_mode = False
         
+        # 重试配置
+        self.max_retries = 3  # 最大重试次数
+        self.retry_delay = 5  # 普通重试延迟（秒）
+        self.service_down_wait = 300  # 服务异常时的等待时间（5分钟）
+        
         # 初始化 RewardAnything Client
         if REWARDANYTHING_AVAILABLE:
             try:
@@ -121,20 +128,120 @@ class IDKGenRM(ORM):
         
         # 系统提示（保留以便兼容）
         self.system_prompt = self._build_system_prompt()
-        self.reward_prompt = self._build_skyrm_question_template()
+        self.reward_principle = self._build_principle()
+        
 
 
 
     def _build_system_prompt(self) -> str:
         """构建系统提示"""
         return "You are a helpful assistant"
-    def _build_skyrm_question_template(self) -> str:
+    
+    def _build_principle(self) -> str:
         """导入奖励提示"""
-        with open("/data/dlf/code/Field-Fidelity/src/train/prompt/sky_rm_v2.md", "r") as f:
+        with open("/data/dlf/code/Field-Fidelity/src/train/prompt/principle_v1.md", "r") as f:
             return f.read()
 
-        
+    def check_service_health(self) -> bool:
+        """检查 RewardAnything 服务是否正常"""
+        if not self.ra_client:
+            logger.error("✗ RewardAnything Client 未初始化")
+            return False
+            
+        try:
+            # 尝试发送一个简单的健康检查请求
+            # 假设服务有一个健康检查端点，如果没有，我们用一个简单的测试请求
+            test_request = {
+                "principle": "Test health check",
+                "prompt": "Test",
+                "responses": {
+                    "response_a": "test1",
+                    "response_b": "test2"
+                }
+            }
+            
+            logger.info("正在检查服务健康状态...")
+            results = self.ra_client.judge_batch([test_request])
+            
+            if results and len(results) > 0:
+                logger.info("✓ 服务健康检查通过")
+                return True
+            else:
+                logger.warning("✗ 服务健康检查失败：返回空结果")
+                return False
+                
+        except Exception as e:
+            logger.error(f"✗ 服务健康检查失败: {e}")
+            return False
 
+    def judge_batch_with_retry(self, request: Dict) -> tuple:
+        """带重试机制的批量评分
+        
+        Returns:
+            (success: bool, result: Any)
+        """
+        if not self.ra_client:
+            logger.error("✗ RewardAnything Client 未初始化")
+            return False, None
+            
+        for attempt in range(self.max_retries):
+            try:
+                logger.info(f"尝试评分 (第 {attempt + 1}/{self.max_retries} 次)")
+                
+                # 调用 Client
+                results = self.ra_client.judge_batch([request])
+                
+                if results and len(results) > 0:
+                    result = results[0]
+                    if hasattr(result, 'scores') and result.scores:
+                        logger.info(f"✓ 评分成功 (第 {attempt + 1} 次尝试)")
+                        return True, result
+                    else:
+                        logger.warning(f"✗ 评分失败：未获得有效评分结果")
+                else:
+                    logger.warning(f"✗ 评分失败：Client返回空结果")
+                
+                # 如果到这里说明评分失败，需要检查服务健康状态
+                if attempt < self.max_retries - 1:  # 不是最后一次尝试
+                    logger.warning(f"评分失败，检查服务状态...")
+                    
+                    # 检查服务健康
+                    is_healthy = self.check_service_health()
+                    
+                    if is_healthy:
+                        # 服务正常，短暂延迟后重试
+                        logger.info(f"服务正常，{self.retry_delay}秒后重试...")
+                        time.sleep(self.retry_delay)
+                    else:
+                        # 服务异常，等待更长时间
+                        logger.warning(f"服务异常，等待 {self.service_down_wait} 秒后重试...")
+                        time.sleep(self.service_down_wait)
+                        
+                        # 再次检查服务健康
+                        is_healthy = self.check_service_health()
+                        if not is_healthy:
+                            logger.error(f"服务仍然异常")
+                
+            except Exception as e:
+                logger.error(f"✗ 评分异常 (第 {attempt + 1} 次): {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+                
+                if attempt < self.max_retries - 1:
+                    # 检查服务健康
+                    logger.warning(f"发生异常，检查服务状态...")
+                    is_healthy = self.check_service_health()
+                    
+                    if is_healthy:
+                        logger.info(f"服务正常，{self.retry_delay}秒后重试...")
+                        time.sleep(self.retry_delay)
+                    else:
+                        logger.warning(f"服务异常，等待 {self.service_down_wait} 秒后重试...")
+                        time.sleep(self.service_down_wait)
+        
+        # 所有重试都失败
+        logger.error(f"✗ 评分失败：已达到最大重试次数 ({self.max_retries})")
+        return False, None
 
     def extract_question_and_answer(self, inp: Dict) -> tuple:
         """从输入中提取问题、回答和参考答案"""
@@ -254,80 +361,59 @@ class IDKGenRM(ORM):
                 logger.info(f"问题有 {len(responses)} 个响应: {list(responses.keys())}")
                 
                 # 构造 principle
-                principle='''
-Evaluate responses using these criteria:
-
-1. **Answer Accuracy** (40%): Factual correctness and alignment with reference answer when provided
-2. **Appropriateness** (30%): Proper handling of certainty/uncertainty, appropriate use of IDK when knowledge is limited
-3. **Expression Quality** (20%): Clear explanations, logical structure, and instruction following
-4. **Relevance** (10%): Response relevance to the question and task requirements
-
-For conflicting criteria, prioritize: accuracy > appropriateness > expression quality > relevance.
-
-Special scoring rules:
-- When reference answer exists: Correct answer > IDK/Uncertain > Wrong answer
-- When reference answer is IDK: Must express uncertainty, specific answers receive penalty
-- When no reference answer: Focus on instruction following and response reasonableness
-'''
+       
                 if len(reference_answer) == 0:
                     prompt = question
                 else:
                     prompt = f"Question: {question}\n\nReference Answer: {reference_answer}"
                 
-                # 批量评分
-                try:
-                    # 构造请求
-                    request = {
-                        "principle": principle,
-                        "prompt": prompt,
-                        "responses": responses
-                    }
+                # 批量评分（带重试机制）
+                # 构造请求
+                request = {
+                    "principle": self.reward_principle,
+                    "prompt": prompt,
+                    "responses": responses
+                }
+                
+                # 调用带重试的评分方法
+                success, result = self.judge_batch_with_retry(request)
+                
+                if success and result:
+                    # 获取分数字典
+                    logger.info(f"获得评分: {result.scores}")
                     
-                    # 调用 Client
-                    results = self.ra_client.judge_batch([request])
-                    
-                    if results and len(results) > 0:
-                        result = results[0]
-                        # 获取分数字典
-                        if hasattr(result, 'scores') and result.scores:
-                            logger.info(f"获得评分: {result.scores}")
+                    # 将分数映射回原始idx
+                    for idx, answer, ref, raw_answer, _ in group_data:
+                        response_key = idx_to_response_key[idx]
+                        if response_key in result.scores:
+                            score = float(result.scores[response_key])
                             
-                            # 将分数映射回原始idx
-                            for idx, answer, ref, raw_answer, _ in group_data:
-                                response_key = idx_to_response_key[idx]
-                                if response_key in result.scores:
-                                    score = float(result.scores[response_key])
-                                    
-                                    # # restrict idk semantic-score
-                                    # if not contains_idk(reference_answer) and contains_idk(raw_answer) and score > 0:
-                                    #     score = -score
-                                    
-                                    rewards[idx] = score
-                                    logger.info(f"样本 {idx + 1} ({response_key}) 奖励: {score:.4f}")
-                                    
-                                    # 记录详细日志
-                                    record = {
-                                        "timestamp": datetime.now().isoformat(),
-                                        "question": question,
-                                        "current_answer": answer,
-                                        "reference_answer": reference_answer,
-                                        "reward_score": score,
-                                        "response_key": response_key,
-                                        "all_scores": result.scores,
-                                        "reasoning":result.reasoning
-                                    }
-                                    write_reward_record(REWARD_JSONL_PATH, record)
-                                else:
-                                    logger.warning(f"样本 {idx + 1}: 未找到对应的评分key {response_key}")
+                            # # restrict idk semantic-score
+                            if not contains_idk(reference_answer) and contains_idk(raw_answer):
+                                score = 1.0
+                            
+                            rewards[idx] = score
+                            logger.info(f"样本 {idx + 1} ({response_key}) 奖励: {score:.4f}")
+                            
+                            # 记录详细日志
+                            record = {
+                                "timestamp": datetime.now().isoformat(),
+                                "question": question,
+                                "current_answer": answer,
+                                "reference_answer": reference_answer,
+                                "reward_score": score,
+                                "response_key": response_key,
+                                "all_scores": result.scores,
+                                "reasoning": result.reasoning
+                            }
+                            write_reward_record(REWARD_JSONL_PATH, record)
                         else:
-                            logger.warning(f"未获得有效评分结果")
-                    else:
-                        logger.warning(f"Client返回空结果")
-                        
-                except Exception as e:
-                    logger.error(f"批量评分失败: {e}")
-                    import traceback
-                    logger.error(traceback.format_exc())
+                            logger.warning(f"样本 {idx + 1}: 未找到对应的评分key {response_key}")
+                else:
+                    # 所有重试都失败，抛出断言错误
+                    error_msg = f"评分失败：问题组 '{question[:50]}...' 在 {self.max_retries} 次重试后仍然失败"
+                    logger.error(error_msg)
+                    assert False, error_msg
                     
             except Exception as e:
                 logger.error(f"处理问题组失败: {e}")
@@ -360,5 +446,5 @@ class CustomFormat(ORM):
         matches = [re.match(pattern, content, re.DOTALL | re.MULTILINE) for content in completions]
         return [1.0 if match else 0.0 for match in matches]
 
-rm_plugins['idk_genrm'] = IDKGenRM 
+rm_plugins['idk_genrm'] = IDKGenRM  
 rm_plugins['custom_format'] = CustomFormat

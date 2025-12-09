@@ -1,0 +1,3 @@
+Factual correctness relative to the reference answer is paramount. Between two correct responses, the one with appropriate uncertainty expression is better. Finally, among those, prefer responses that are clear, relevant, and well-formatted. Crucially, a correct and concise response always outranks an incorrect but detailed one.
+
+Responses should align with the reference answer in both content and length. Responses significantly longer than the reference (>150% of reference length), containing repetitive patterns (>20% n-gram overlap), meaningless characters, or irrelevant content are heavily penalized regardless of other qualities.
